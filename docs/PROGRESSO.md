@@ -1,6 +1,6 @@
 # Progresso factual do MVP
 
-**Última atualização:** 2026-11-18 | **Situação:** F1 (REST/contrato), F2 (consistência/concorrência), F3 (eventos/WS), F4 (gateway/segurança/telemetria) e F5 (automação/segredos) validadas em execução real. Além de balanceamento 10/10, failover, JWT/TLS/WSS, circuit breaker, DLQ e Dozzle, a F5 comprovou `npm ci`, lockfile versionado, repositório Git e clone limpo em projeto Compose isolado. AWS Secrets Manager, CI remota e ensaio final da demo continuam pendentes.
+**Última atualização:** 2026-11-18 | **Situação:** F1–F6 concluídas. O ensaio final da demo passou de ponta a ponta: `smoke`, concorrência, burst, WebSocket, tracing, caos de API, DLQ, segurança e circuit breaker, sem falhas. Permanecem não validados apenas A14 (AWS sem credencial válida), A16 (CI sem runner remoto) e A18 (explicação dos integrantes). Versão final marcada com tag Git.
 
 ## 0. Estado atual do ambiente
 
@@ -11,9 +11,10 @@
 - Volumes criados; nenhum `docker compose down -v` foi executado.
 - Dados de demonstração foram gerados pelos smokes; o banco não é um ambiente limpo.
 - Durante a F2 e a F3 o Docker Desktop parou sozinho mais de uma vez; foi reiniciado e a stack voltou com `docker compose up -d --scale api=2`. Volumes e dados foram preservados.
-- Estado após a F5: 298 eventos, 0 pendentes no outbox e 298 com registro em `eventos_processados`; 156 senhas (19 AGUARDANDO, 132 CHAMADA, 5 FINALIZADA). `sac.events.dlq` contém 1 mensagem malformada injetada pelo teste de DLQ. Nenhuma constraint temporária permanece.
-- Dozzle iniciado com `docker compose --profile observabilidade up -d logs` e exposto em `127.0.0.1:8081`; a stack passa a ter 7 containers (o profile não sobe por padrão).
+- Estado após a F6: 391 eventos, 0 pendentes no outbox e 391 com registro em `eventos_processados`; 226 senhas (67 AGUARDANDO, 153 CHAMADA, 6 FINALIZADA). `sac.events.dlq` contém 2 mensagens malformadas injetadas pelos ensaios de DLQ. Nenhuma constraint temporária permanece.
+- Dozzle iniciado com `docker compose --profile observabilidade up -d logs` e exposto em `127.0.0.1:8081`; a stack tem 7 containers (o profile não sobe por padrão).
 - O clone de validação da F5 foi executado em `C:\Users\Santz\AppData\Local\Temp\opencode\sac_bahia_clone_f5`, com projeto, rede e portas próprios, e depois desmontado com `docker compose down` (sem `-v`). A demo principal não foi afetada.
+- Ensaio final da F6 executado na demo principal, com as 2 réplicas, Dozzle ativo e dados preservados.
 
 
 ## 1. Inventário real (não presumido)
@@ -160,6 +161,37 @@
 - O Docker Desktop caiu durante o primeiro teste do clone, derrubando a réplica `api-2` e produzindo 401 transitório. Após reiniciar e restaurar `--scale api=2`, o mesmo token foi validado localmente (assinatura HS256 correta) e o fluxo passou.
 - O `secrets_check.py` da F4 continua válido: o lockfile novo não contém segredos locais nem padrões AWS/JWT.
 
+### F6 — ensaio final da demo (execução real)
+
+Ensaio executado em 2026-11-18 na demo principal, com 2 réplicas da API, PostgreSQL, RabbitMQ, Worker, Traefik e Dozzle ativos.
+
+| Ordem | Comando | Resultado |
+|---|---|---|
+| 1 | `python scripts/smoke.py` | **PASSOU** — REST/contrato, idempotência, RBAC, consulta, chamada e finalização com backlog de 19 senhas; fila drenada e uma senha finalizada (58,3 s). |
+| 2 | `python scripts/concurrent_calls.py` | **PASSOU** — guichês 1 e 3 chamaram senhas diferentes (155 e 156), sem conflito (8,6 s). |
+| 3 | `python scripts/burst.py` | **PASSOU** — 60 emissões simultâneas, 60 IDs e números únicos (2,9 s). |
+| 4 | `python scripts/websocket_test.py` | **PASSOU** — `FILA_ATUALIZADA`/`SENHA_EMITIDA` entregue por WSS em 7,0 s. |
+| 5 | `python scripts/tracing.py` | **PASSOU** — mesmo `correlation_id` em `http_request`, `event_persisted`, `event_published`/`event_processed` e `websocket_forwarded` nas duas APIs (10,6 s). |
+| 6 | `python scripts/chaos.py` | **PASSOU** — réplica `ae2270658db0` parada; gateway atendeu em `ad18369e1411`; senha 220 emitida e consultada durante a queda; réplica restaurada e os dois nós voltaram a atender (31,7 s). |
+| 7 | `python scripts/dlq.py` | **PASSOU** — DLQ aumentou de 1 para 2 após retries da mensagem malformada (13,7 s). |
+| 8 | `python scripts/security_test.py` | **PASSOU** — 12 verificações de JWT/RBAC/escopo/WSS/TLS/HTTP puro (40,5 s). |
+| 9 | `python scripts/circuit_breaker_test.py` | **PASSOU** — broker parado: `circuit_opened` (3 falhas) e `breaker=OPEN`; recuperação: `HALF_OPEN` → `CLOSED`; senha 223 publicada e processada (28,2 s). |
+| 10 | `python scripts/secrets_check.py` | **PASSOU** — 4 segredos e padrões AWS/JWT ausentes em 61 arquivos e 8.290 linhas de log (4,3 s). |
+| 11 | Varredura final de invariantes | **PASSOU** — 391 eventos, 0 pendentes, 0 sem processamento, 0 órfãos, 0 duplicados; 226 senhas (67 AGUARDANDO, 153 CHAMADA, 6 FINALIZADA); `processing`/`retry` vazias; DLQ com 2 injetadas. |
+
+**Totais do ensaio:** 11 verificações, todas com exit 0, ~3,6 min de execução somada.
+
+**Preparação offline:** todas as imagens usadas estão locais (`sac-bahia-api`, `sac-bahia-worker`, `postgres:16-alpine`, `rabbitmq:3.13-management-alpine`, `traefik:v3.6.16`, `amir20/dozzle:v8`); os scripts apontam para `https://localhost:8443` e `http://127.0.0.1:8081`, sem dependência de internet. O build não é necessário na sala se as imagens estiverem carregadas.
+
+**Arquivos alterados na F6:** `docs/PROGRESSO.md`, `docs/ACEITE.md` e `docs/ENTREGA.md` (checklist de ensaio). Nenhuma alteração em `api/`, `worker/src/`, `database/`, `openapi.yaml`, `compose.yaml` ou scripts de teste.
+
+**Observações do ensaio:**
+
+- Nenhuma queda do Docker Desktop ocorreu nesta fase; a stack permaneceu saudável do início ao fim.
+- O `smoke.py` consumiu o backlog existente, por isso o total de AGUARDANDO caiu e o de CHAMADA subiu; isso é esperado e não é falha.
+- O ensaio cobriu também os blocos de segurança e circuit breaker do roteiro, além dos 7 scripts exigidos na F6.
+- A18 continua **NÃO VALIDADO**: o roteiro está preparado, mas a explicação individual dos integrantes não é automatizável.
+
 ## 3. Estado por requisito
 
 Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**, **FALTA**. Auditoria de código não equivale a teste executado.
@@ -190,7 +222,7 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 | C5 segurança | PARCIAL | JWT/RBAC/TLS/WSS reais e testados; certificado de desenvolvimento sem CA pública; AWS Secrets Manager não executado. |
 | C6 logs | FUNCIONA TESTADO | Correlation ID comprovado em API, Worker e fanout por `tracing.py`; logs agregados no Dozzle. |
 | C7 DevOps | PARCIAL | Git, lockfile, `npm ci`, clone limpo e build/up/config passaram; falta execução de pipeline remoto (A16) e AWS real (A14). |
-| C8 demonstração | PARCIAL | Roteiros de carga, caos, DLQ, broker, reconexão, circuit breaker e tracing ensaiados; ensaio completo da demo pendente (A18). |
+| C8 demonstração | PARCIAL | Ensaio completo da F6 passou: 11 verificações com exit 0, cobrindo REST, concorrência, burst, WS, tracing, caos, DLQ, segurança e circuit breaker. A18 (explicação individual dos integrantes) segue pendente. |
 
 **A01, A02, A03, A04, A05, A06, A07, A08, A09, A10, A11, A12, A13, A15 e A17 passaram com evidência real (F1–F5).** Permanecem não validados: A14 (AWS Secrets Manager), A16 (CI remota) e A18 (explicação dos integrantes).
 
@@ -233,6 +265,13 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 5. `scripts/balancing.py` deixou de depender do nome fixo `sac-bahia-api-1`: deriva o container de `docker compose ps -q api`, funcionando em qualquer projeto Compose.
 6. Foi identificado e contornado o acoplamento entre projetos Compose no mesmo host: rede fixa `sac-bahia_public` e router `sac` fazem um Traefik descobrir as APIs do outro. O clone de teste usou rede/router/portas próprios.
 
+### RESOLVIDOS NA F6
+
+1. O ensaio final foi executado na ordem do roteiro, sem falhas: `smoke`, `concurrent_calls`, `burst`, `websocket_test`, `tracing`, `chaos`, `dlq`, `security_test` e `circuit_breaker_test`, todos com exit 0.
+2. Invariantes finais confirmados: 391 eventos, 0 pendentes/órfãos/duplicados; filas `processing`/`retry` vazias; DLQ com as 2 mensagens injetadas.
+3. Cenário offline verificado: imagens locais e endpoints `localhost`, sem dependência de internet para a demo.
+4. Checklist de entrega (`docs/ENTREGA.md`) revisado com evidência do ensaio.
+
 ### PENDENTES
 
 1. A14 (AWS Secrets Manager/`GetSecretValue`) está bloqueado: as credenciais disponíveis retornam `InvalidClientTokenId` e o Terraform não está instalado. Não houve custo nem criação de recurso.
@@ -256,12 +295,12 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 
 ## 6. Próximo passo
 
-**F5 concluída.** Aguardando autorização para iniciar a **F6 — ensaio final da demo (C8/A18)**:
+**F6 concluída.** O MVP está em estado de entrega/arguição:
 
-1. Ensaiar o roteiro completo da apresentação com carga, caos, DLQ, broker, reconexão, circuit breaker e tracing em sequência.
-2. Alinhar a ordem dos comandos com `docs/ACEITE.md` e deixar Dozzle iniciado (`--profile observabilidade`).
-3. Redigir o roteiro de explicação para os integrantes (A18) cobrindo consistência, idempotência, DNS, falhas, segurança e limites do MVP.
-4. Reexecutar `npm run test:all`, `py -m compileall -q cliente-python scripts`, `docker compose config -q` e `secrets_check.py` antes da entrega.
-5. Manter AWS (A14) e CI remota (A16) como NÃO VALIDADOS, salvo se houver credenciais válidas e repositório remoto autorizados.
+1. Apresentar na ordem de `docs/ENTREGA.md`, deixando Dozzle iniciado e as 2 réplicas ativas.
+2. Cada integrante deve conseguir explicar o fluxo completo (A18); usar a divisão sugerida no `docs/ENTREGA.md` apenas como apoio.
+3. Declarar com transparência as limitações: AWS (A14) sem credencial válida, CI (A16) sem runner remoto, certificado TLS de desenvolvimento e acoplamento de rede entre projetos Compose no mesmo host.
+4. Não reexecutar `docker compose down -v` nem operações AWS sem autorização explícita.
+5. Se houver credencial AWS válida e repositório remoto autorizados, reabrir A14/A16 pontualmente; nenhum outro requisito está pendente.
 
-**Não iniciar F6 sem autorização.**
+**Não iniciar novas fases nem marcar A14/A16/A18 como PASSOU sem evidência real.**

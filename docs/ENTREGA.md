@@ -17,7 +17,7 @@ O documento anterior de exemplos (REST/OpenAPI/Swagger) especifica Node.js/Expre
 | **C5** | Provar TLS local, autenticação JWT, `scripts/security_test.py` (401/403) e `.env` ignorado; opcional leitura real Secrets Manager com `aws_secrets_loaded` | TLS cert não confiável e sem mTLS interno |
 | **C6** | `scripts/tracing.py` vê mesmo Correlation ID nos dois processos, logs JSON/Dozzle | Não é tracing completo com spans/Prometheus |
 | **C7** | Clone limpo, `python scripts/setup_env.py`, Compose, README, CI GitHub Actions, Terraform apenas segredo | Terraform AWS depende de permissão/custo |
-| **C8** | Rodar três scripts do professor, explicar transação, escolha do broker, fallback e decisões | Demonstração ainda precisa ser ensaiada |
+| **C8** | Rodar três scripts do professor, explicar transação, escolha do broker, fallback e decisões | Ensaio F6 concluído; A18 (explicação individual) pendente |
 
 Os níveis **Excelente** do barema incluem características que este MVP não pretende cumprir integralmente (especialmente HPA/ASG, service discovery avançado e mTLS/VPC). Não prometer nota 10 como fato.
 
@@ -46,22 +46,45 @@ Atribuições devem ser adaptadas aos integrantes reais; **todos precisam entend
 
 ## Checklist de aceite — não declarar como realizado até testar
 
-- [ ] Repositório hospedado no GitHub, com commits e README.
-- [ ] Primeira subida num computador diferente funciona via Compose.
-- [ ] API em duas réplicas comunicando-se apenas por rede com DB/Worker/broker.
-- [ ] Cliente Python realiza fluxo de usuário e atendente; contrato corresponde a JSON real.
-- [ ] WebSocket recebe eventos sem polling contínuo; reconcilia após reconectar.
-- [ ] 60 emissões simultâneas sem duplicações; chamadas concorrentes sem conflito.
-- [ ] Repetição de Idempotency-Key retorna mesmo id; payload divergente retorna 409.
-- [ ] Evento em outbox sobrevive à indisponibilidade temporária do RabbitMQ.
-- [ ] Retry e DLQ demonstrados; Circuit Breaker tem transição OPEN/HALF_OPEN/CLOSED comprovada.
-- [ ] Queda de uma API não derruba consultas; sistema sinaliza corretamente falha de banco/gateway.
-- [ ] Token de cidadão não acessa outra senha; atendente de posto 1 não acessa posto 2.
-- [ ] Logs API/Worker compartilham Correlation ID; console local acessível.
-- [ ] TLS local comprovado, suas limitações explicadas; segredos não aparecem no Git.
-- [ ] Caso se alegue AWS Secrets Manager, acesso real comprovado com IAM mínimo.
-- [ ] CI passa no GitHub; Terraform é validado se apresentado.
-- [ ] Testes repetidos antes da arguição e capturas de evidência sem credenciais.
+Revisado após o ensaio final de 2026-11-18 (F6). `[x]` = comprovado em execução real nesta máquina; `[ ]` = pendente ou não comprovado.
+
+- [ ] Repositório hospedado no GitHub, com commits e README. — Repositório Git local com commits; **não há remote/GitHub** (A16).
+- [ ] Primeira subida num computador diferente funciona via Compose. — Clone limpo funcionou no mesmo host (F5); **outro computador não foi testado**.
+- [x] API em duas réplicas comunicando-se apenas por rede com DB/Worker/broker. — `balancing.py` 10/10 por réplica; DNS por nome.
+- [x] Cliente Python realiza fluxo de usuário e atendente; contrato corresponde a JSON real. — `smoke.py` e CLI.
+- [x] WebSocket recebe eventos sem polling contínuo; reconcilia após reconectar. — `websocket_test.py`, `ws_reconnect_test.py`.
+- [x] 60 emissões simultâneas sem duplicações; chamadas concorrentes sem conflito. — `burst.py` e `concurrent_calls.py` (F6).
+- [x] Repetição de Idempotency-Key retorna mesmo id; payload divergente retorna 409. — `smoke.py` e `consistency_test.py`.
+- [x] Evento em outbox sobrevive à indisponibilidade temporária do RabbitMQ. — `broker_chaos.py` (F3).
+- [x] Retry e DLQ demonstrados; Circuit Breaker tem transição OPEN/HALF_OPEN/CLOSED comprovada. — `dlq.py` e `circuit_breaker_test.py` (F6).
+- [x] Queda de uma API não derruba consultas; sistema sinaliza corretamente falha de banco/gateway. — `chaos.py`, senha 220 durante a queda (F6).
+- [x] Token de cidadão não acessa outra senha; atendente de posto 1 não acessa posto 2. — `security_test.py`, 12 verificações (F6).
+- [x] Logs API/Worker compartilham Correlation ID; console local acessível. — `tracing.py` + Dozzle em `127.0.0.1:8081`.
+- [x] TLS local comprovado, suas limitações explicadas; segredos não aparecem no Git. — TLSv1.3, `secrets_check.py` (61 arquivos/8.290 linhas); certificado autoassinado declarado.
+- [ ] Caso se alegue AWS Secrets Manager, acesso real comprovado com IAM mínimo. — **NÃO VALIDADO**: credencial retorna `InvalidClientTokenId` (A14).
+- [ ] CI passa no GitHub; Terraform é validado se apresentado. — Workflow validado localmente; **sem runner remoto** e Terraform não instalado (A16).
+- [ ] Testes repetidos antes da arguição e capturas de evidência sem credenciais. — Testes reexecutados no ensaio F6; **capturas de tela ainda não foram geradas**.
+
+## Ensaio final de 2026-11-18 (F6)
+
+Ambiente: 2 réplicas da API, PostgreSQL, RabbitMQ, Worker, Traefik e Dozzle ativos. Todos os comandos com exit 0.
+
+| Ordem | Script | Resultado | Duração |
+|---|---|---|---|
+| 1 | `smoke.py` | fluxo REST completo com backlog | 58,3 s |
+| 2 | `concurrent_calls.py` | senhas 155 e 156 em guichês distintos | 8,6 s |
+| 3 | `burst.py` | 60 emissões, 0 duplicados | 2,9 s |
+| 4 | `websocket_test.py` | `FILA_ATUALIZADA` via WSS | 7,0 s |
+| 5 | `tracing.py` | mesmo Correlation ID em API/Worker/fanout | 10,6 s |
+| 6 | `chaos.py` | réplica derrubada, senha 220 durante a queda | 31,7 s |
+| 7 | `dlq.py` | DLQ de 1 para 2 | 13,7 s |
+| 8 | `security_test.py` | 12 verificações JWT/RBAC/TLS | 40,5 s |
+| 9 | `circuit_breaker_test.py` | OPEN → HALF_OPEN → CLOSED, senha 223 | 28,2 s |
+| 10 | `secrets_check.py` | 0 segredos em arquivos/logs | 4,3 s |
+
+Invariantes finais: 391 eventos, 0 pendentes, 0 órfãos, 0 duplicados; 226 senhas (67 AGUARDANDO, 153 CHAMADA, 6 FINALIZADA); `processing`/`retry` vazias; DLQ com 2 mensagens injetadas.
+
+**Offline:** imagens locais e endpoints `localhost`; a demo não depende de internet. A tag Git da versão validada é criada após este ensaio (ver `git tag`).
 
 ## Códigos e evidências para registrar
 
