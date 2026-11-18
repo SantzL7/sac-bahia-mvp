@@ -1,0 +1,115 @@
+name: sac-bahia
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sac
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Execute python scripts/setup_env.py}
+      POSTGRES_DB: sac
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/02-seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sac -d sac"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+    networks: [backend]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: sac
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Execute python scripts/setup_env.py}
+    ports:
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+    networks: [backend]
+
+  api:
+    build: .
+    environment:
+      SERVICE_NAME: api
+      DATABASE_URL: postgres://sac:${DB_PASSWORD}@postgres:5432/sac
+      AMQP_URL: amqp://sac:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      JWT_SECRET: ${JWT_SECRET:?Execute python scripts/setup_env.py}
+      STAFF_PASSWORD: ${STAFF_PASSWORD:?Execute python scripts/setup_env.py}
+      STAFF_USERNAME: ${STAFF_USERNAME:-atendente}
+      AWS_SECRET_ID: ${AWS_SECRET_ID:-}
+      AWS_REGION: ${AWS_REGION:-sa-east-1}
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    expose: ["3000"]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=sac-bahia_public
+      - traefik.http.routers.sac.rule=PathPrefix(`/api/`) || PathPrefix(`/health/`) || Path(`/ws`)
+      - traefik.http.routers.sac.entrypoints=websecure
+      - traefik.http.routers.sac.tls=true
+      - traefik.http.services.sac.loadbalancer.server.port=3000
+      - traefik.http.services.sac.loadbalancer.healthcheck.path=/health/ready
+      - traefik.http.services.sac.loadbalancer.healthcheck.interval=5s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [public,backend]
+
+  worker:
+    build: .
+    command: ["node", "worker/src/worker.js"]
+    environment:
+      SERVICE_NAME: worker
+      DATABASE_URL: postgres://sac:${DB_PASSWORD}@postgres:5432/sac
+      AMQP_URL: amqp://sac:${RABBITMQ_PASSWORD}@rabbitmq:5672
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+    networks: [backend]
+
+  traefik:
+    image: traefik:v3.6.16
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.websecure.address=:443
+      - --accesslog=true
+      - --api.dashboard=false
+    ports:
+      - "127.0.0.1:8443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [api]
+    restart: unless-stopped
+    networks: [public]
+
+  logs:
+    image: amir20/dozzle:v8
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    profiles: [observabilidade]
+
+networks:
+  public:
+    name: sac-bahia_public
+  backend:
+    internal: true
+volumes:
+  postgres_data:
+  rabbitmq_data:

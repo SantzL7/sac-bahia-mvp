@@ -1,0 +1,39 @@
+# Checklist de homologação e apresentação
+
+> Preencher somente após teste efetivamente executado. Estado inicial **NÃO VALIDADO**. Não marcar PASSOU apenas por inspeção de código. Até a F4, foram comprovados em execução real: A02, A03, A04, A05, A06, A07, A08, A09, A10, A11, A12, A13, A15 e A17.
+
+| ID | Teste de aceite | Critério | Status | Evidência |
+|---|---|---|---|---|
+| A01 | Clone limpo, configuração local e `docker compose up -d --build --scale api=2` | elegibilidade/C7 | NÃO VALIDADO | — |
+| A02 | Cliente Python lista posto e consulta ETA via Node/API REST | C1 | PASSOU | 2026-11-17; `cliente-python/main.py --inseguro postos` e `fila --posto 1` via `https://localhost:8443`; exit 0; 2 postos e `tempo_espera_minutos`. |
+| A03 | Emissão, consulta, chamada e finalização operam em sequência | C1/C8 | PASSOU | 2026-11-17; `python scripts/smoke.py`; `PASS: REST/contrato, idempotência, RBAC, consulta, chamada, finalização.` 2026-11-18; reexecutado com 130 senhas AGUARDANDO à frente, limite dinâmico, exit 0 e fila esvaziada (`0 AGUARDANDO`). |
+| A04 | Mensagem WebSocket chega com atualização após evento de outra conexão | C1 | PASSOU | 2026-11-18; `scripts/websocket_test.py` recebeu `FILA_ATUALIZADA` em ~7 s. `scripts/ws_flow_test.py`: 2 conexões em réplicas distintas (`ad18369e1411`/`ae2270658db0`) receberam `SENHA_EMITIDA`, `SENHA_CHAMADA` e `SENHA_FINALIZADA` gerados por REST; `websocket_forwarded` apareceu nas duas APIs para cada evento. |
+| A05 | 50–100 requisições concorrentes sem senhas duplicadas | C2 | PASSOU | 2026-11-18; `python scripts/burst.py`: 60 emissões simultâneas, 60 IDs e números únicos, exit 0; PostgreSQL com 0 duplicados, 0 senhas sem evento e 0 filas desalinhadas. |
+| A06 | Duas chamadas simultâneas não escolhem a mesma senha | C2/C3 | PASSOU | 2026-11-18; `python scripts/concurrent_calls.py`: senhas 2 e 3 chamadas em guichês distintos; 0 chamadas duplicadas e 0 senha em dois guichês. |
+| A07 | Mesma idempotency-key + mesmo payload reaproveita senha; diferente = 409 | C2/C3 | PASSOU | 2026-11-17; `scripts/smoke.py` repetiu a chave e recebeu 200 com `reutilizada=true`; payload divergente retornou 409. 2026-11-18; `scripts/consistency_test.py` confirmou o mesmo em requisições paralelas: uma senha, `reutilizada` `[False, True]`, e 201/409 com payload divergente. |
+| A08 | Parar uma API, preservar novas requisições e recuperar | C3/C4/C8 | PASSOU | 2026-11-18; `scripts/chaos.py`: réplica `ae2270658db0` parada; gateway atendeu em `ad18369e1411`; senha 144 emitida e consultada via REST **durante a queda**; réplica restaurada `healthy` e os dois nós voltaram a atender (exit 0, 35,1 s). |
+| A09 | Parar Worker ou RabbitMQ e confirmar estado persistido/outbox com recuperação | C3/C8 | PASSOU | 2026-11-18; `scripts/broker_chaos.py`: com o RabbitMQ parado, emissão persistiu senha `AGUARDANDO` e evento com `publicado_em IS NULL`; após reiniciar, o evento foi publicado e processado; novo ticket chegou via WS e ambas as senhas continuaram `AGUARDANDO` (exit 0, 40,4 s). |
+| A10 | Mensagem inválida chega à DLQ após política limitada de retry | C3 | PASSOU | 2026-11-18; `scripts/dlq.py`: `event_retry_scheduled` nas tentativas 1 e 2, `event_dead_letter` na 3ª; `sac.events.dlq` de 0 para 1 pelo `rabbitmqctl` interno (exit 0, 14,4 s). |
+| A11 | Recuperação WS/REST após desconexão | C1/C3 | PASSOU | 2026-11-18; `scripts/ws_reconnect_test.py`: réplica `ae2270658db0` parada, conexão WS encerrada, reconexão em `ad18369e1411` com novo evento e consulta REST retornando `AGUARDANDO`; réplica restaurada `healthy`. `scripts/cli_idle_test.py`: 15 s ocioso sem reconexão e segundo evento na mesma conexão. |
+| A12 | Docker DNS e balanceamento comprovados por logs de nós diferentes | C4 | PASSOU | 2026-11-18; `scripts/balancing.py`: API resolve `postgres` e `rabbitmq` por nome (`172.18.0.5`/`172.18.0.4`); 20 requisições, **10/10** em cada réplica, 0 erros; ambas as instâncias nos logs JSON (exit 0, 42,9 s). |
+| A13 | TLS/WSS, JWT com escopo de posto e 401/403 | C5 | PASSOU | 2026-11-18; `scripts/security_test.py`: 12 verificações — 401 sem token, JWT adulterado/outro segredo/expirado/`alg=none`/audiência-errada; 403 para ticket alheio, guichê de outro posto e token válido de posto 2 em guichê do posto 1; WSS válido aceito e inválido recusado (401); TLSv1.3 negociado; certificado local não confiável por CA pública (exit 0, 41,8 s). |
+| A14 | Secrets Manager integrado e `GetSecretValue` evidenciado (se autorizado) | C5 | NÃO VALIDADO | — |
+| A15 | Logs correlacionados API → evento → Worker e visualização agregada | C6/C8 | PASSOU | 2026-11-18; `scripts/tracing.py` mostrou o mesmo `correlation_id` em `event_persisted`, `event_processed`/`event_published` e `websocket_forwarded` nas duas APIs. `scripts/telemetry_test.py`: Dozzle v8.14.12 em `127.0.0.1:8081` lista os 6 serviços do projeto e exibe os logs agregados. |
+| A16 | CI verde, build, testes e análise estática/validações | C7 | NÃO VALIDADO | — |
+| A17 | Três roteiros de caos/carga/tracing preparados e ensaiados | C8 | PASSOU | 2026-11-18; ensaiados com exit 0: carga `scripts/burst.py` (60 concorrentes); caos `scripts/chaos.py` (queda de API), `scripts/broker_chaos.py` (broker) e `scripts/circuit_breaker_test.py` (circuit breaker); tracing `scripts/tracing.py`; reconexão `scripts/ws_reconnect_test.py`. O ensaio completo da apresentação (A18) segue pendente. |
+| A18 | Todos integrantes explicam fluxo, consistência, limites, DNS, falhas e segurança | C8 | NÃO VALIDADO | — |
+
+## Scripts existentes
+`python scripts/smoke.py`, `burst.py`, `concurrent_calls.py`, `consistency_test.py`, `security_test.py`, `balancing.py`, `websocket_test.py`, `ws_flow_test.py`, `tracing.py`, `dlq.py`, `broker_chaos.py`, `ws_reconnect_test.py`, `cli_idle_test.py`, `circuit_breaker_test.py`, `telemetry_test.py`, `secrets_check.py`, `chaos.py`. Revisar pressupostos e resultados antes de confiar em cada um.
+
+## Formato de evidência
+- Comando exato; data/hora; ambiente; exit code; resultado observado; screenshot ou log redigido.
+- Log sanitizado: mascarar JWT, `.env`, senhas, ARN/identificadores sensíveis conforme aplicável.
+- `docs/evidencias/` pode conter prints e pequenos `.txt`; nunca despejar dumps de banco contendo credenciais.
+
+## Limitações arquiteturais honestas
+- Um só PostgreSQL e um só Traefik são pontos únicos de falha.
+- Descoberta dinâmica via Traefik não prova escalonamento automático por utilização.
+- Logs agregados simples não são tracing distribuído completo com spans.
+- HTTPS local com certificado de desenvolvimento não representa PKI de produção.
+- Caso Circuit Breaker não esteja presente/validado, C3 Excelente não pode ser declarado.

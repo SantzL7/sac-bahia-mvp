@@ -1,0 +1,13 @@
+.env
+node_modules/
+__pycache__/
+.venv/
+.pytest_cache/
+*.pyc
+infra/terraform/.terraform/
+infra/terraform/*.tfstate*
+infra/terraform/*.tfvars
+*.pem
+*.key
+evidencias-locais/
+secret-payload.json

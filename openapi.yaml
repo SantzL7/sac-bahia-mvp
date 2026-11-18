@@ -1,0 +1,262 @@
+openapi: 3.0.3
+info:
+  title: SAC Bahia — protótipo acadêmico distribuído
+  version: 1.0.0
+  description: Dados sintéticos. Não há vínculo nem integração com o SAC Bahia oficial.
+servers:
+  - url: https://localhost:8443
+    description: Traefik local; certificado de desenvolvimento
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Posto:
+      name: id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    Senha:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  schemas:
+    Error:
+      type: object
+      required: [erro]
+      properties:
+        erro: {type: string}
+        correlation_id: {type: string, format: uuid}
+    Fila:
+      type: object
+      required: [posto, posto_id, tempo_espera_minutos, quantidade_aguardando]
+      properties:
+        posto: {type: string}
+        posto_id: {type: integer}
+        tempo_espera_minutos: {type: integer, nullable: true}
+        quantidade_aguardando: {type: integer}
+        prioritarias: {type: integer}
+        normais: {type: integer}
+        guiches_ativos: {type: integer}
+        atualizado_em: {type: string, format: date-time}
+        estimativa: {type: string, enum: [SIMULADA]}
+    Emissao:
+      type: object
+      required: [senha_id,numero,categoria,status,token,reutilizada]
+      properties:
+        senha_id: {type: string, format: uuid}
+        numero: {type: integer}
+        categoria: {type: string, enum: [NORMAL, PRIORITARIA]}
+        status: {type: string, enum: [AGUARDANDO, CHAMADA, FINALIZADA]}
+        token: {type: string, description: JWT de acompanhamento da senha}
+        reutilizada: {type: boolean}
+    SenhaStatus:
+      type: object
+      required: [senha_id,numero,categoria,status,posto_id,posicao,tempo_espera_minutos]
+      properties:
+        senha_id: {type: string, format: uuid}
+        numero: {type: integer}
+        categoria: {type: string, enum: [NORMAL,PRIORITARIA]}
+        status: {type: string, enum: [AGUARDANDO,CHAMADA,FINALIZADA]}
+        posto_id: {type: integer}
+        guiche_id: {type: integer,nullable: true}
+        posicao: {type: integer}
+        tempo_espera_minutos: {type: integer,nullable: true}
+    Chamada:
+      type: object
+      required: [id, numero, categoria, status, guiche_id]
+      properties:
+        id: {type: string, format: uuid}
+        numero: {type: integer}
+        categoria: {type: string, enum: [NORMAL, PRIORITARIA]}
+        status: {type: string, enum: [CHAMADA]}
+        guiche_id: {type: integer}
+  responses:
+    BadRequest:
+      description: Parâmetros inválidos
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unauthorized:
+      description: Autenticação necessária ou token inválido
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Forbidden:
+      description: Operação não permitida para o papel, ticket ou posto
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    NotFound:
+      description: Recurso inexistente
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Conflict:
+      description: Conflito de estado ou de idempotência
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+paths:
+  /health/live:
+    get:
+      summary: Verificar se o processo HTTP está vivo
+      responses:
+        '200': {description: Processo ativo}
+  /health/ready:
+    get:
+      summary: Verificar conectividade com o PostgreSQL
+      responses:
+        '200': {description: API pronta para operações persistentes}
+        '503': {description: Dependência crítica indisponível}
+  /api/v1/postos:
+    get:
+      summary: Listar postos simulados
+      responses:
+        '200':
+          description: Lista de postos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  postos:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: integer}
+                        nome: {type: string}
+                        cidade: {type: string}
+  /api/v1/postos/{id}/fila:
+    parameters:
+      - $ref: '#/components/parameters/Posto'
+    get:
+      summary: Consultar fila e tempo de espera estimado
+      responses:
+        '200':
+          description: Estado da fila
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Fila'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/postos/{id}/senhas:
+    parameters:
+      - $ref: '#/components/parameters/Posto'
+    post:
+      summary: Emitir senha idempotente
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 8, maxLength: 128}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [categoria]
+              properties:
+                categoria: {type: string, enum: [NORMAL, PRIORITARIA]}
+      responses:
+        '201':
+          description: Senha emitida
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Emissao'}
+        '200':
+          description: Repetição idempotente da mesma emissão
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Emissao'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/auth/atendente:
+    post:
+      summary: Autenticar atendente de demonstração no posto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usuario,senha,posto_id]
+              properties:
+                usuario: {type: string}
+                senha: {type: string,format: password}
+                posto_id: {type: integer}
+      responses:
+        '200':
+          description: JWT de atendente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: {type: string}
+                  expira_em_segundos: {type: integer}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/senhas/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Senha'
+    get:
+      summary: Consultar senha própria ou do posto autorizado
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Senha e posição
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SenhaStatus'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/guiches/{id}/chamar:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: integer,minimum: 1}
+    post:
+      summary: Chamar próxima senha do guichê
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Senha chamada
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Chamada'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/senhas/{id}/finalizar:
+    parameters:
+      - $ref: '#/components/parameters/Senha'
+    post:
+      summary: Finalizar senha chamada
+      security: [{BearerAuth: []}]
+      responses:
+        '200': {description: Senha finalizada}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ws:
+    get:
+      summary: Upgrade WebSocket; Authorization Bearer JWT no handshake
+      description: Canal wss de notificações do posto. O cliente consulta o estado verdadeiro por REST após o evento.
+      security: [{BearerAuth: []}]
+      responses:
+        '101': {description: Switching Protocols}
+        '401': {description: JWT inválido}

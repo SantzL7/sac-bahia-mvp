@@ -1,0 +1,23 @@
+{
+  "name": "sac-bahia-mvp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Protótipo acadêmico distribuído de filas; dados simulados, sem integração com SAC Bahia oficial",
+  "type": "commonjs",
+  "scripts": {
+    "start:api": "node api/src/server.js",
+    "start:worker": "node worker/src/worker.js",
+    "test": "node --test tests/*.test.js",
+    "check": "node --check api/src/server.js && node --check api/src/security.js && node --check api/src/rabbit.js && node --check worker/src/worker.js && node --check shared/core.js && node --check shared/log.js && node --check scripts/check-aws-secret.js",
+    "test:all": "npm run check && npm test"
+  },
+  "engines": {"node": ">=22"},
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "3.750.0",
+    "amqplib": "0.10.5",
+    "express": "4.21.2",
+    "jsonwebtoken": "9.0.2",
+    "pg": "8.13.3",
+    "ws": "8.18.0"
+  }
+}

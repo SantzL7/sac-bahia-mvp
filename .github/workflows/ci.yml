@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verificar e testar Node.js
+        run: |
+          npm ci --no-audit --no-fund
+          npm run test:all
+      - name: Validar contrato OpenAPI
+        run: |
+          python -m pip install --quiet openapi-spec-validator
+          python -m openapi_spec_validator openapi.yaml
+      - name: Verificar scripts Python
+        run: python -m compileall -q cliente-python scripts
+      - name: Validar sintaxe Compose
+        run: |
+          python scripts/setup_env.py --quiet
+          docker compose config -q
+      - name: Build imagens
+        run: docker compose build
