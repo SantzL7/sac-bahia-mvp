@@ -1,6 +1,6 @@
 # Progresso factual do MVP
 
-**Última atualização:** 2026-11-18 | **Situação:** F1 (REST/contrato), F2 (consistência/concorrência), F3 (eventos/WS) e F4 (gateway/segurança/telemetria) validadas em execução real. Balanceamento 10/10 entre réplicas, failover com nova emissão durante a queda, JWT/TLS/WSS, circuit breaker, DLQ e agregação Dozzle passaram. CI/Git, AWS Secrets Manager e ensaio final da demo continuam pendentes.
+**Última atualização:** 2026-11-18 | **Situação:** F1 (REST/contrato), F2 (consistência/concorrência), F3 (eventos/WS), F4 (gateway/segurança/telemetria) e F5 (automação/segredos) validadas em execução real. Além de balanceamento 10/10, failover, JWT/TLS/WSS, circuit breaker, DLQ e Dozzle, a F5 comprovou `npm ci`, lockfile versionado, repositório Git e clone limpo em projeto Compose isolado. AWS Secrets Manager, CI remota e ensaio final da demo continuam pendentes.
 
 ## 0. Estado atual do ambiente
 
@@ -11,19 +11,20 @@
 - Volumes criados; nenhum `docker compose down -v` foi executado.
 - Dados de demonstração foram gerados pelos smokes; o banco não é um ambiente limpo.
 - Durante a F2 e a F3 o Docker Desktop parou sozinho mais de uma vez; foi reiniciado e a stack voltou com `docker compose up -d --scale api=2`. Volumes e dados foram preservados.
-- Estado após a F4: 295 eventos, 0 pendentes no outbox e 0 sem registro em `eventos_processados`; 16 senhas AGUARDANDO, 132 CHAMADA e 5 FINALIZADA. `sac.events.dlq` contém 1 mensagem malformada injetada pelo teste de DLQ. Nenhuma constraint temporária permanece.
+- Estado após a F5: 298 eventos, 0 pendentes no outbox e 298 com registro em `eventos_processados`; 156 senhas (19 AGUARDANDO, 132 CHAMADA, 5 FINALIZADA). `sac.events.dlq` contém 1 mensagem malformada injetada pelo teste de DLQ. Nenhuma constraint temporária permanece.
 - Dozzle iniciado com `docker compose --profile observabilidade up -d logs` e exposto em `127.0.0.1:8081`; a stack passa a ter 7 containers (o profile não sobe por padrão).
+- O clone de validação da F5 foi executado em `C:\Users\Santz\AppData\Local\Temp\opencode\sac_bahia_clone_f5`, com projeto, rede e portas próprios, e depois desmontado com `docker compose down` (sem `-v`). A demo principal não foi afetada.
 
 
 ## 1. Inventário real (não presumido)
 
-- 50 arquivos de projeto, excluindo `node_modules` e `__pycache__`.
+- 61 arquivos rastreados no Git (commit `aae029d`), excluindo `node_modules` e `__pycache__`.
 - Componentes presentes: `api/` (Node/Express + WS), `worker/` (outbox + consumidor), `cliente-python/`, `database/` (schema/seed), `shared/`, `scripts/`, `tests/`, `infra/terraform/`, `.github/workflows/`.
-- Contratos/configuração presentes: `openapi.yaml`, `compose.yaml`, `compose.aws.yaml`, `Dockerfile`, `.env.example`, `.gitignore`, `.dockerignore`.
+- Contratos/configuração presentes: `openapi.yaml`, `compose.yaml`, `compose.aws.yaml`, `Dockerfile`, `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, `.dockerignore`.
 - Documentação presente: PRD, MVP, REQUISITOS, ARQUITETURA, ARQUITETURA_ALVO, MATRIZ_BAREMA, PLANO_EXECUCAO, ACEITE, ENTREGA, VALIDACAO_LOCAL, PROMPTS_OPENCODE, GUIA_OPENCODE.
-- Artefatos agora presentes localmente: `.env`, `.venv`, `node_modules`.
-- Artefatos ainda ausentes: `package-lock.json`, `.git`, `docs/evidencias/`.
-- `node_modules` foi gerado com `npm install --no-package-lock`; é ignorado pelo `.gitignore`.
+- Artefatos locais não versionados: `.env`, `.venv`, `node_modules` (todos cobertos pelo `.gitignore`).
+- Artefatos ainda ausentes: `docs/evidencias/`, infraestrutura AWS real e pipeline remoto.
+- `package-lock.json` (87 KB) foi gerado na F5 e é versionado; `npm ci` instala 178 pacotes a partir dele.
 
 ## 2. Comandos executados e resultado real
 
@@ -38,8 +39,8 @@
 | `docker info` | **F0 FALHOU** (daemon parado); **F1 PASSOU** após iniciar o Docker Desktop (`29.7.2`). |
 | `terraform version` | **NÃO EXECUTADO** — Terraform não instalado. |
 | `git status` | **FALHOU** — a pasta não é repositório Git. |
-| Smokes REST/WS/RabbitMQ/PostgreSQL, burst, chaos, DLQ, tracing | **F0 NÃO EXECUTADOS**; **F1:** `smoke.py` e `security_test.py` com PASS; **F2:** `burst.py`, `concurrent_calls.py` e `consistency_test.py` com PASS; **F3:** `websocket_test.py`, `ws_flow_test.py`, `dlq.py`, `broker_chaos.py`, `ws_reconnect_test.py`, `cli_idle_test.py` e `tracing.py` com PASS; **F4:** `balancing.py`, `chaos.py` (ampliado), `security_test.py` (ampliado), `circuit_breaker_test.py`, `telemetry_test.py`, `secrets_check.py` e `tracing.py` com PASS. |
-| AWS Secrets Manager (`terraform plan/apply`, `GetSecretValue`) | **NÃO EXECUTADO** — sem credenciais/custo autorizado; requisito permanece pendente. |
+| Smokes REST/WS/RabbitMQ/PostgreSQL, burst, chaos, DLQ, tracing | **F0 NÃO EXECUTADOS**; **F1:** `smoke.py` e `security_test.py` com PASS; **F2:** `burst.py`, `concurrent_calls.py` e `consistency_test.py` com PASS; **F3:** `websocket_test.py`, `ws_flow_test.py`, `dlq.py`, `broker_chaos.py`, `ws_reconnect_test.py`, `cli_idle_test.py` e `tracing.py` com PASS; **F4:** `balancing.py`, `chaos.py` (ampliado), `security_test.py` (ampliado), `circuit_breaker_test.py`, `telemetry_test.py`, `secrets_check.py` e `tracing.py` com PASS; **F5:** `smoke.py` e `balancing.py` com PASS no clone limpo. |
+| AWS Secrets Manager (`terraform plan/apply`, `GetSecretValue`) | **FALHOU / BLOQUEADO** — `aws sts get-caller-identity` e `scripts/check-aws-secret.js` retornaram `InvalidClientTokenId` (credenciais inválidas/expiradas); Terraform não está instalado. Nenhum recurso ou custo foi criado. |
 
 ### F1 — execução real
 
@@ -132,6 +133,33 @@
 - O Dozzle está no profile `observabilidade` e não sobe por padrão; é preciso iniciá-lo explicitamente. A porta 8081 funciona no host (diferente da 15672 do RabbitMQ).
 - O certificado TLS local é autoassinado pelo Traefik. TLSv1.3 e WSS funcionam, mas o certificado não é confiável por CA pública; isso é esperado no ambiente de demonstração e não representa PKI de produção.
 
+### F5 — execução real
+
+| Comando / verificação | Resultado |
+|---|---|
+| `npm install --package-lock-only --no-audit --no-fund` | **PASSOU** — `package-lock.json` gerado com 87.290 bytes, sem alterar `node_modules`. |
+| `npm ci --no-audit --no-fund` | **PASSOU** — 178 pacotes instalados a partir do lockfile em 4 s, exit 0. |
+| `npm run test:all` | **PASSOU** — análise sintática + 4/4 testes unitários. |
+| `python -m openapi_spec_validator openapi.yaml` | **PASSOU** — `openapi.yaml: OK`. |
+| `git init -b main` + commit | **PASSOU** — commit `aae029d`, **61 arquivos rastreados**, árvore limpa; `.env`, `.venv/`, `node_modules/` e `__pycache__/` ignorados (confirmado por `git check-ignore` e `git ls-files`). |
+| Clone limpo + `py scripts/setup_env.py --quiet` | **PASSOU** — clone em diretório temporário com `.env` novo; `git status` limpo; `docker compose config -q` exit 0. |
+| Clone + `docker compose up -d --build --scale api=2` | **PASSOU** — 6 serviços `Up`; API-1, API-2, PostgreSQL e RabbitMQ `healthy`. |
+| Clone + `python scripts/smoke.py` | **PASSOU** — REST, idempotência, RBAC, consulta, chamada e finalização (27,3 s), exit 0. |
+| Clone + `python scripts/balancing.py` | **PASSOU** — DNS Docker por nome; 20 requisições **10/10** em cada réplica (`b7cc5dbd4f7b`/`80562ba1023a`), 0 erros (42,4 s), exit 0. |
+| `aws sts get-caller-identity` / `node scripts/check-aws-secret.js` | **FALHOU** — `InvalidClientTokenId`: as credenciais AWS presentes estão inválidas ou expiradas. Nenhum recurso foi criado e nenhum custo foi incorrido. |
+| `terraform version` | **NÃO EXECUTADO** — Terraform não está instalado no host. |
+| `py -m compileall -q cliente-python scripts`, `docker compose config -q`, parsing do CI | **PASSOU** — exit 0; workflow YAML válido (`CI_YAML_OK`). |
+| Estado final da demo após o clone | **PASSOU** — `/health/ready` 200 em `ad18369e1411`; 156 senhas (19 AGUARDANDO, 132 CHAMADA, 5 FINALIZADA), 298 eventos, 0 pendentes, 298 processados. |
+
+**Arquivos alterados na F5:** `package-lock.json` (novo), `.github/workflows/ci.yml` (`npm ci` + validação OpenAPI), `scripts/balancing.py` (DNS deriva o container de `docker compose ps -q api`), `docs/PROGRESSO.md` e `docs/ACEITE.md`. Nenhuma alteração em `api/`, `worker/src/`, `database/`, `openapi.yaml` ou `compose.yaml`.
+
+**Observações metodológicas da F5:**
+
+- O CI foi atualizado para `npm ci` e para validar o `openapi.yaml`, mas **não existe repositório remoto nem runner**: o workflow foi validado por parsing YAML e os passos foram executados manualmente no host. A16 continua NÃO VALIDADO.
+- O primeiro clone compartilhava a rede fixa `sac-bahia_public` e o router Traefik `sac` com a demo, causando descoberta cruzada das APIs (401 por segredo JWT diferente e 201 onde se esperava 409). O clone de teste foi isolado com projeto, rede, router e portas próprios; essa limitação de dois projetos no mesmo host está registrada em PENDENTES.
+- O Docker Desktop caiu durante o primeiro teste do clone, derrubando a réplica `api-2` e produzindo 401 transitório. Após reiniciar e restaurar `--scale api=2`, o mesmo token foi validado localmente (assinatura HS256 correta) e o fluxo passou.
+- O `secrets_check.py` da F4 continua válido: o lockfile novo não contém segredos locais nem padrões AWS/JWT.
+
 ## 3. Estado por requisito
 
 Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**, **FALTA**. Auditoria de código não equivale a teste executado.
@@ -150,21 +178,21 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 | RNF01 processos autônomos | PARCIAL | `docker compose ps` mostrou 6 serviços e 2 APIs saudáveis; tráfego entre nós não instrumentado. |
 | RNF02 consistência/concorrência | FUNCIONA TESTADO | Burst de 60 sem duplicados, lock de fila, idempotência concorrente e rollback induzido comprovados. |
 | RNF03 eventos resilientes | FUNCIONA TESTADO | Outbox sem pendentes; retry limitado com DLQ; broker parado preservou senha/evento e recuperou publicação e processamento; entrega duplicada ignorada. |
-| RNF04 escala/roteamento | PARCIAL | 2 APIs e Traefik ativos; WS provou clientes em réplicas distintas, mas balanceamento de carga não foi medido. |
+| RNF04 escala/roteamento | PARCIAL | 2 APIs e Traefik ativos; balanceamento 10/10 entre réplicas comprovado na F4; throughput/latência sob carga entre nós ainda não medidos. |
 | RNF05 segurança | PARCIAL | 401/403, JWT adulterado/expirado/`alg=none` e escopo de posto comprovados; WSS/TLSv1.3 ativos com certificado de desenvolvimento; AWS Secrets Manager pendente. |
 | RNF06 observabilidade | FUNCIONA TESTADO | `tracing.py` correlaciona API → Worker → fanout; Dozzle lista os 6 serviços e exibe os logs agregados. |
-| RNF07 reprodutibilidade | PARCIAL | Compose build/up/config passaram; **FALTA** `.git`, `package-lock.json`; CI não executado. |
+| RNF07 reprodutibilidade | FUNCIONA TESTADO | `package-lock.json` versionado, `npm ci` (178 pacotes), Git com commit `aae029d` (61 arquivos) e clone limpo com `--scale api=2`, smoke e balanceamento 10/10. CI remota ainda não executada. |
 | RNF08 falhas controladas | FUNCIONA TESTADO | Circuit breaker do worker ensaiado (OPEN → HALF_OPEN → CLOSED) com broker parado; caos de API, broker e WS executados. |
 | C1 comunicação | FUNCIONA TESTADO | REST/OpenAPI/CLI e WS reais; eventos entregues a duas conexões em réplicas distintas. |
-| C2 concorrência/escala | PARCIAL | Concorrência comprovada (A05/A06); 2 réplicas ativas, mas balanceamento/throughput entre nós ficam para F4. |
+| C2 concorrência/escala | FUNCIONA TESTADO | Burst e chamadas concorrentes sem duplicados; 2 réplicas reais com balanceamento 10/10 comprovado na F4. |
 | C3 resiliência | FUNCIONA TESTADO | Rollback, atomicidade, broker parado, retry/DLQ, reconexão WS e circuit breaker (OPEN → HALF_OPEN → CLOSED) comprovados. |
 | C4 nomes/roteamento | FUNCIONA TESTADO | DNS Docker por nome, balanceamento 10/10 entre réplicas, entrada/saída de nó com nova emissão durante a queda. |
 | C5 segurança | PARCIAL | JWT/RBAC/TLS/WSS reais e testados; certificado de desenvolvimento sem CA pública; AWS Secrets Manager não executado. |
 | C6 logs | FUNCIONA TESTADO | Correlation ID comprovado em API, Worker e fanout por `tracing.py`; logs agregados no Dozzle. |
-| C7 DevOps | PARCIAL | Build/up/config passaram; sem Git, lockfile ou CI remota. |
+| C7 DevOps | PARCIAL | Git, lockfile, `npm ci`, clone limpo e build/up/config passaram; falta execução de pipeline remoto (A16) e AWS real (A14). |
 | C8 demonstração | PARCIAL | Roteiros de carga, caos, DLQ, broker, reconexão, circuit breaker e tracing ensaiados; ensaio completo da demo pendente (A18). |
 
-**A02, A03, A04, A05, A06, A07, A08, A09, A10, A11, A12, A13, A15 e A17 passaram com evidência real (F1–F4).** Permanecem não validados: A01 (clone limpo), A14 (AWS), A16 (CI/Git) e A18 (explicação dos integrantes).
+**A01, A02, A03, A04, A05, A06, A07, A08, A09, A10, A11, A12, A13, A15 e A17 passaram com evidência real (F1–F5).** Permanecem não validados: A14 (AWS Secrets Manager), A16 (CI remota) e A18 (explicação dos integrantes).
 
 ## 4. Defeitos e riscos
 
@@ -196,17 +224,26 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 6. Dozzle foi iniciado pelo profile `observabilidade` e `scripts/telemetry_test.py` comprovou a visão agregada dos 6 serviços.
 7. `scripts/secrets_check.py` comprovou que os 4 segredos locais e padrões AWS/JWT não aparecem em arquivos nem em 5.904 linhas de log.
 
+### RESOLVIDOS NA F5
+
+1. `package-lock.json` foi gerado e versionado; `npm ci` instalou 178 pacotes em 4 s e `npm run test:all` passou 4/4.
+2. O CI passou a usar `npm ci` e a validar `openapi.yaml`; o YAML foi parseado com sucesso e os passos foram executados manualmente.
+3. Git foi inicializado em `main`, com `.env`, `.venv/`, `node_modules/` e `__pycache__/` ignorados; commit `aae029d` com 61 arquivos e árvore limpa.
+4. O fluxo de clone limpo foi comprovado (A01): `.env` novo, `docker compose config -q`, build/up com 2 réplicas, smoke 27,3 s e balanceamento 10/10.
+5. `scripts/balancing.py` deixou de depender do nome fixo `sac-bahia-api-1`: deriva o container de `docker compose ps -q api`, funcionando em qualquer projeto Compose.
+6. Foi identificado e contornado o acoplamento entre projetos Compose no mesmo host: rede fixa `sac-bahia_public` e router `sac` fazem um Traefik descobrir as APIs do outro. O clone de teste usou rede/router/portas próprios.
+
 ### PENDENTES
 
-1. A01 (clone limpo) não pode ser executado: não há repositório Git, então não existe clone para validar.
-2. A14 (AWS Secrets Manager/`GetSecretValue`) continua bloqueado por ausência de credenciais e autorização de custo; não foi executado.
-3. A16 (CI verde) continua bloqueado: sem `.git`, sem `package-lock.json` e sem execução de pipeline remoto.
-4. A18 depende dos integrantes explicarem o fluxo; não é automatizável.
+1. A14 (AWS Secrets Manager/`GetSecretValue`) está bloqueado: as credenciais disponíveis retornam `InvalidClientTokenId` e o Terraform não está instalado. Não houve custo nem criação de recurso.
+2. A16 (CI remota) continua bloqueado: não há repositório remoto nem runner; o workflow foi validado apenas localmente (YAML + passos manuais).
+3. A18 depende dos integrantes explicarem o fluxo; não é automatizável.
+4. Dois projetos Compose no mesmo host compartilham a rede fixa `sac-bahia_public` e o router Traefik `sac`; isso permite descoberta cruzada das APIs (401 por JWT diferente, 201 onde se esperava 409). Para o clone foi usado isolamento total; a demo principal mantém o nome fixo.
 5. `scripts/testing.py:8` não normaliza barra final em `SAC_URL`; uma variável com `/` pode gerar `//api/...`. Normalização simples.
 6. Latência sequencial medida em ~2,1 s por requisição com nova conexão TLS e ~0,42 s com `requests.Session`; para a F6, reutilizar sessão ou esvaziar a fila antes da demonstração.
 7. A porta 15672 do RabbitMQ não é encaminhada ao host pelo Docker Desktop; o caminho interno (`rabbitmqctl`/helper no worker) funciona. Se a demonstração exigir o Management UI, recriar o container ou revisar o mapeamento.
 8. `worker/src/republish_event.js` é um helper de teste posterior ao build; containers novos só o terão após rebuild, e o container atual exigiu `docker compose cp`.
-9. O Docker Desktop parou sozinho mais de uma vez durante a F2/F3/F4; a recuperação foi `docker compose up -d --scale api=2`, com dados preservados.
+9. O Docker Desktop parou sozinho mais de uma vez durante a F2/F3/F4/F5; a recuperação foi `docker compose up -d --scale api=2`, com dados preservados. Durante o clone, a queda derrubou uma réplica e gerou 401 transitório até a restauração.
 10. O Dozzle está no profile `observabilidade` e precisa ser iniciado explicitamente antes da demo.
 11. O certificado TLS local é autoassinado e não é confiável por CA pública; isso é esperado no ambiente de demonstração, mas impede declarar PKI de produção.
 
@@ -219,12 +256,12 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 
 ## 6. Próximo passo
 
-**F4 concluída.** Aguardando autorização para iniciar a **F5 — Automação e serviço de segredos (C5/C7)**:
+**F5 concluída.** Aguardando autorização para iniciar a **F6 — ensaio final da demo (C8/A18)**:
 
-1. Garantir `.env.example`, `scripts/setup_env.py`, Compose e CI realmente executando.
-2. Gerar `package-lock.json` e versioná-lo; avaliar `npm ci` no CI/contêiner se compatível.
-3. Inicializar Git e validar um clone limpo (A01) sem versionar `.env`, `.venv`, `node_modules` ou evidências locais.
-4. AWS somente com autorização explícita: `terraform fmt/validate/plan` e leitura real do segredo com permissão mínima; não executar `apply` sem custo aprovado.
-5. Atualizar `docs/PROGRESSO.md` e `docs/ACEITE.md` somente com o que passar de fato.
+1. Ensaiar o roteiro completo da apresentação com carga, caos, DLQ, broker, reconexão, circuit breaker e tracing em sequência.
+2. Alinhar a ordem dos comandos com `docs/ACEITE.md` e deixar Dozzle iniciado (`--profile observabilidade`).
+3. Redigir o roteiro de explicação para os integrantes (A18) cobrindo consistência, idempotência, DNS, falhas, segurança e limites do MVP.
+4. Reexecutar `npm run test:all`, `py -m compileall -q cliente-python scripts`, `docker compose config -q` e `secrets_check.py` antes da entrega.
+5. Manter AWS (A14) e CI remota (A16) como NÃO VALIDADOS, salvo se houver credenciais válidas e repositório remoto autorizados.
 
-**Não iniciar F6 (ensaio final da demo) sem autorização.**
+**Não iniciar F6 sem autorização.**
