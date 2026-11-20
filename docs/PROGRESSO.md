@@ -148,7 +148,7 @@
 | Clone + `python scripts/smoke.py` | **PASSOU** — REST, idempotência, RBAC, consulta, chamada e finalização (27,3 s), exit 0. |
 | Clone + `python scripts/balancing.py` | **PASSOU** — DNS Docker por nome; 20 requisições **10/10** em cada réplica (`b7cc5dbd4f7b`/`80562ba1023a`), 0 erros (42,4 s), exit 0. |
 | `aws sts get-caller-identity` / `node scripts/check-aws-secret.js` | **FALHOU** — `InvalidClientTokenId`: as credenciais AWS presentes estão inválidas ou expiradas. Nenhum recurso foi criado e nenhum custo foi incorrido. |
-| `terraform version` | **NÃO EXECUTADO** — Terraform não está instalado no host. |
+| `terraform version` | **PASSOU em 2026-11-20** — Terraform 1.17.1 instalado via `winget`. O `main.tf` tinha bloco `variable` de uma linha (HCL inválido) e foi corrigido; `terraform fmt -check`, `init -backend=false` (provider AWS 5.100.0) e `validate` passaram. `plan/apply` ainda dependem de credencial AWS válida. |
 | `py -m compileall -q cliente-python scripts`, `docker compose config -q`, parsing do CI | **PASSOU** — exit 0; workflow YAML válido (`CI_YAML_OK`). |
 | Estado final da demo após o clone | **PASSOU** — `/health/ready` 200 em `ad18369e1411`; 156 senhas (19 AGUARDANDO, 132 CHAMADA, 5 FINALIZADA), 298 eventos, 0 pendentes, 298 processados. |
 
@@ -274,8 +274,8 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 
 ### PENDENTES
 
-1. A14 (AWS Secrets Manager/`GetSecretValue`) está bloqueado: as credenciais disponíveis retornam `InvalidClientTokenId` e o Terraform não está instalado. Não houve custo nem criação de recurso.
-2. A16 (CI remota) continua bloqueado: não há repositório remoto nem runner; o workflow foi validado apenas localmente (YAML + passos manuais).
+1. A14 (AWS Secrets Manager/`GetSecretValue`) está bloqueado: as credenciais disponíveis retornam `InvalidClientTokenId`. Terraform 1.17.1 já está instalado e `fmt/init/validate` passaram em `sa-east-1`; falta credencial válida para `plan/apply`, gravação do valor do segredo e leitura real. Não houve custo nem criação de recurso.
+2. A16 (CI remota) continua bloqueado: não há repositório remoto nem runner; o workflow foi validado apenas localmente (YAML + passos manuais). O `gh` 2.105.0 está instalado, mas não autenticado.
 3. A18 depende dos integrantes explicarem o fluxo; não é automatizável.
 4. Dois projetos Compose no mesmo host compartilham a rede fixa `sac-bahia_public` e o router Traefik `sac`; isso permite descoberta cruzada das APIs (401 por JWT diferente, 201 onde se esperava 409). Para o clone foi usado isolamento total; a demo principal mantém o nome fixo.
 5. `scripts/testing.py:8` não normaliza barra final em `SAC_URL`; uma variável com `/` pode gerar `//api/...`. Normalização simples.
