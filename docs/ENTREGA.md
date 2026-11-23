@@ -48,7 +48,7 @@ Atribuições devem ser adaptadas aos integrantes reais; **todos precisam entend
 
 Revisado após o ensaio final de 2026-11-18 (F6). `[x]` = comprovado em execução real nesta máquina; `[ ]` = pendente ou não comprovado.
 
-- [ ] Repositório hospedado no GitHub, com commits e README. — Repositório Git local com commits; **não há remote/GitHub** (A16).
+- [x] Repositório hospedado no GitHub, com commits e README. — **Privado `SantzL7/sac-bahia-mvp`**, `main` em `58c526e`, tag `v1.0.0-mvp` e CI verde (run 45115049769).
 - [ ] Primeira subida num computador diferente funciona via Compose. — Clone limpo funcionou no mesmo host (F5); **outro computador não foi testado**.
 - [x] API em duas réplicas comunicando-se apenas por rede com DB/Worker/broker. — `balancing.py` 10/10 por réplica; DNS por nome.
 - [x] Cliente Python realiza fluxo de usuário e atendente; contrato corresponde a JSON real. — `smoke.py` e CLI.
@@ -62,7 +62,7 @@ Revisado após o ensaio final de 2026-11-18 (F6). `[x]` = comprovado em execuç�
 - [x] Logs API/Worker compartilham Correlation ID; console local acessível. — `tracing.py` + Dozzle em `127.0.0.1:8081`.
 - [x] TLS local comprovado, suas limitações explicadas; segredos não aparecem no Git. — TLSv1.3, `secrets_check.py` (61 arquivos/8.290 linhas); certificado autoassinado declarado.
 - [ ] Caso se alegue AWS Secrets Manager, acesso real comprovado com IAM mínimo. — **NÃO VALIDADO**: credencial retorna `InvalidClientTokenId` (A14).
-- [ ] CI passa no GitHub; Terraform é validado se apresentado. — Workflow validado localmente; **sem runner remoto** e Terraform não instalado (A16).
+- [x] CI passa no GitHub; Terraform é validado se apresentado. — **CI verde** na run 45115049769 (A16); Terraform 1.17.1 `fmt/init/validate` OK, `plan/apply` não executados (A14).
 - [ ] Testes repetidos antes da arguição e capturas de evidência sem credenciais. — Testes reexecutados no ensaio F6; **capturas de tela ainda não foram geradas**.
 
 ## Ensaio final de 2026-11-18 (F6)

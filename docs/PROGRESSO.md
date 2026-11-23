@@ -1,11 +1,11 @@
 # Progresso factual do MVP
 
-**Última atualização:** 2026-11-23 | **Situação:** F1–F6 concluídas e ensaio final aprovado. O núcleo distribuído (REST, concorrência, outbox/eventos, WS, DNS/Traefik, segurança, logs, caos e circuit breaker) está validado com evidência real. Permanecem A14 (AWS sem credencial válida), A16 (GitHub autenticado, mas repositório remoto ainda não criado) e A18 (explicação dos integrantes). Docker Desktop está parado no momento; a última stack verificada (18/11) tinha 7 containers.
+**Última atualização:** 2026-11-23 | **Situação:** F1–F6 concluídas e ensaio final aprovado. O núcleo distribuído (REST, concorrência, outbox/eventos, WS, DNS/Traefik, segurança, logs, caos e circuit breaker) está validado com evidência real. A16 foi fechado com CI verde no repositório privado `SantzL7/sac-bahia-mvp`. Permanecem A14 (AWS sem credencial válida) e A18 (explicação dos integrantes). Docker Desktop está parado no momento; a última stack verificada (18/11) tinha 7 containers.
 
 ## 0. Estado atual do ambiente
 
 - **2026-11-23:** Docker Desktop está parado; a stack não está em execução. Quando ativa, `docker info` respondeu e a stack continha os serviços abaixo.
-- **Git:** `main` com histórico linear (HEAD atual); tag `v1.0.0-mvp`; 62 arquivos rastreados; árvore limpa; **nenhum remote GitHub configurado**. `gh` 2.105.0 autenticado como `SantzL7`.
+- **Git:** `main` com histórico linear; tag `v1.0.0-mvp` (`eca1aea`); 62 arquivos rastreados; árvore limpa; **remote `origin` = `https://github.com/SantzL7/sac-bahia-mvp` (privado)**. `gh` 2.105.0 autenticado como `SantzL7`.
 - **AWS:** credencial ainda inválida (`InvalidClientTokenId`); Terraform 1.17.1 validado, sem `plan/apply` e sem recursos/custos.
 - `.env` local criado por `py scripts/setup_env.py --quiet` (conteúdo não versionado).
 - `.venv` criado com `requests`, `websocket-client` e validador OpenAPI.
@@ -158,7 +158,7 @@
 
 **Observações metodológicas da F5:**
 
-- O CI foi atualizado para `npm ci` e para validar o `openapi.yaml`, mas **não existe repositório remoto nem runner**: o workflow foi validado por parsing YAML e os passos foram executados manualmente no host. A16 continua NÃO VALIDADO.
+- O CI foi atualizado para `npm ci` e para validar o `openapi.yaml`; naquela data não existia repositório remoto nem runner, então o workflow foi validado por parsing YAML e os passos foram executados manualmente. A16 foi fechado depois, em 2026-11-23, com CI verde no GitHub.
 - O primeiro clone compartilhava a rede fixa `sac-bahia_public` e o router Traefik `sac` com a demo, causando descoberta cruzada das APIs (401 por segredo JWT diferente e 201 onde se esperava 409). O clone de teste foi isolado com projeto, rede, router e portas próprios; essa limitação de dois projetos no mesmo host está registrada em PENDENTES.
 - O Docker Desktop caiu durante o primeiro teste do clone, derrubando a réplica `api-2` e produzindo 401 transitório. Após reiniciar e restaurar `--scale api=2`, o mesmo token foi validado localmente (assinatura HS256 correta) e o fluxo passou.
 - O `secrets_check.py` da F4 continua válido: o lockfile novo não contém segredos locais nem padrões AWS/JWT.
@@ -194,6 +194,35 @@ Ensaio executado em 2026-11-18 na demo principal, com 2 réplicas da API, Postgr
 - O ensaio cobriu também os blocos de segurança e circuit breaker do roteiro, além dos 7 scripts exigidos na F6.
 - A18 continua **NÃO VALIDADO**: o roteiro está preparado, mas a explicação individual dos integrantes não é automatizável.
 
+### A16 — publicação no GitHub e CI remota (execução real)
+
+Em 2026-11-23, o item A16 foi fechado com execução real do GitHub Actions.
+
+**Conferência prévia (antes do push):**
+- Antes do push: `main` limpa em `58c526e`, 62 arquivos rastreados, sem remote.
+- Varredura de segredos nos arquivos rastreados e em todo o histórico (62 caminhos): nenhum achado de `AKIA`/`ASIA`, `aws_secret_access_key`, token `gh[pousr]_`/`github_pat_`, chave privada, `sk-` ou `xox*`.
+- `.env` confirmado como ignorado (`.gitignore:1`); `.env.example` versionado apenas com placeholders; nenhum `.pem`, `.key`, `.tfstate`, `.tfvars` ou `secret-payload.json` no histórico.
+- `gh auth status`: conta `SantzL7`, protocolo HTTPS, escopos `repo` e `workflow`.
+
+**Publicação:**
+- `gh repo view SantzL7/sac-bahia-mvp` retornou "Could not resolve" (repositório inexistente), então não houve histórico remoto a preservar.
+- `gh repo create SantzL7/sac-bahia-mvp --private --source=. --remote=origin --push` criou o repositório privado e publicou `main`.
+- `git push origin v1.0.0-mvp` publicou a tag anotada (objeto `fc2905c` → commit `eca1aea`). Nenhum force push foi usado.
+
+**Execuções do CI:**
+
+| Run | Ref | Commit | Resultado | Duração |
+|---|---|---|---|---|
+| [45115049769](https://github.com/SantzL7/sac-bahia-mvp/actions/runs/45115049769) | `main` | `58c526e` | **success** | 32 s |
+| [45115052149](https://github.com/SantzL7/sac-bahia-mvp/actions/runs/45115052149) | tag `v1.0.0-mvp` | `eca1aea` | **success** | ~30 s |
+
+Passos verdes no runner `ubuntu-latest`: `actions/checkout@v4`, `setup-node@v4` (Node 22), `setup-python@v5` (3.12), `npm ci --no-audit --no-fund` + `npm run test:all` (4/4), `openapi-spec-validator` em `openapi.yaml`, `compileall` de `cliente-python` e `scripts`, `scripts/setup_env.py --quiet` + `docker compose config -q` e `docker compose build`.
+
+**Observações:**
+- O único aviso foi a anotação de depreciação do Node 20 nas actions (`checkout@v4`, `setup-node@v4`, `setup-python@v5`), forçadas a rodar em Node 24. É aviso, não falha; não exige correção para o MVP.
+- O CI valida código, contrato, configuração e build das imagens. Ele **não sobe a stack** nem executa os testes E2E; esses continuam comprovados separadamente pelo ensaio F6 em Docker local.
+- A tag `v1.0.0-mvp` continua apontando para `eca1aea` (ensaio F6), anterior ao fix de Terraform e às atualizações de docs. O commit de entrega com o CI verde é `58c526e`; a criação de uma tag final é decisão pendente do usuário.
+
 ## 3. Estado por requisito
 
 Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**, **FALTA**. Auditoria de código não equivale a teste executado.
@@ -215,7 +244,7 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 | RNF04 escala/roteamento | PARCIAL | 2 APIs e Traefik ativos; balanceamento 10/10 entre réplicas comprovado na F4; throughput/latência sob carga entre nós ainda não medidos. |
 | RNF05 segurança | PARCIAL | 401/403, JWT adulterado/expirado/`alg=none` e escopo de posto comprovados; WSS/TLSv1.3 ativos com certificado de desenvolvimento; AWS Secrets Manager pendente. |
 | RNF06 observabilidade | FUNCIONA TESTADO | `tracing.py` correlaciona API → Worker → fanout; Dozzle lista os 6 serviços e exibe os logs agregados. |
-| RNF07 reprodutibilidade | FUNCIONA TESTADO | `package-lock.json` versionado, `npm ci` (178 pacotes), Git com commit `aae029d` (61 arquivos) e clone limpo com `--scale api=2`, smoke e balanceamento 10/10. CI remota ainda não executada. |
+| RNF07 reprodutibilidade | FUNCIONA TESTADO | `package-lock.json` versionado, `npm ci` (178 pacotes), Git com clone limpo, smoke e balanceamento 10/10; CI remota verde na run 45115049769 (`58c526e`). |
 | RNF08 falhas controladas | FUNCIONA TESTADO | Circuit breaker do worker ensaiado (OPEN → HALF_OPEN → CLOSED) com broker parado; caos de API, broker e WS executados. |
 | C1 comunicação | FUNCIONA TESTADO | REST/OpenAPI/CLI e WS reais; eventos entregues a duas conexões em réplicas distintas. |
 | C2 concorrência/escala | FUNCIONA TESTADO | Burst e chamadas concorrentes sem duplicados; 2 réplicas reais com balanceamento 10/10 comprovado na F4. |
@@ -223,10 +252,10 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 | C4 nomes/roteamento | FUNCIONA TESTADO | DNS Docker por nome, balanceamento 10/10 entre réplicas, entrada/saída de nó com nova emissão durante a queda. |
 | C5 segurança | PARCIAL | JWT/RBAC/TLS/WSS reais e testados; certificado de desenvolvimento sem CA pública; AWS Secrets Manager não executado. |
 | C6 logs | FUNCIONA TESTADO | Correlation ID comprovado em API, Worker e fanout por `tracing.py`; logs agregados no Dozzle. |
-| C7 DevOps | PARCIAL | Git, lockfile, `npm ci`, clone limpo e build/up/config passaram; falta execução de pipeline remoto (A16) e AWS real (A14). |
+| C7 DevOps | **FUNCIONA TESTADO** | Git, lockfile, `npm ci`, clone limpo, build/up/config e **CI remota verde** (run 45115049769, `58c526e`, 32 s). AWS real (A14) continua pendente, mas é requisito separado de C5. |
 | C8 demonstração | PARCIAL | Ensaio completo da F6 passou: 11 verificações com exit 0, cobrindo REST, concorrência, burst, WS, tracing, caos, DLQ, segurança e circuit breaker. A18 (explicação individual dos integrantes) segue pendente. |
 
-**A01, A02, A03, A04, A05, A06, A07, A08, A09, A10, A11, A12, A13, A15 e A17 passaram com evidência real (F1–F5).** Permanecem não validados: A14 (AWS Secrets Manager), A16 (CI remota) e A18 (explicação dos integrantes).
+**A01, A02, A03, A04, A05, A06, A07, A08, A09, A10, A11, A12, A13, A15, A16 e A17 passaram com evidência real (F1–F6 e publicação no GitHub).** Permanecem não validados: A14 (AWS Secrets Manager) e A18 (explicação dos integrantes).
 
 ## 4. Defeitos e riscos
 
@@ -277,7 +306,7 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 ### PENDENTES
 
 1. A14 (AWS Secrets Manager/`GetSecretValue`) está bloqueado: as credenciais disponíveis retornam `InvalidClientTokenId`. Terraform 1.17.1 já está instalado e `fmt/init/validate` passaram em `sa-east-1`; falta credencial válida para `plan/apply`, gravação do valor do segredo e leitura real. Não houve custo nem criação de recurso.
-2. A16 (CI remota) continua bloqueado: não há repositório remoto nem runner. O `gh` 2.105.0 está instalado e autenticado como `SantzL7` (2026-11-23); falta criar o repositório privado, configurar o remote e fazer push para o workflow rodar. O workflow foi validado localmente (YAML + passos manuais).
+2. A16 foi **fechado em 2026-11-23**: repositório privado `SantzL7/sac-bahia-mvp` publicado com `main` em `58c526e` e tag `v1.0.0-mvp`; CI verde nas runs 45115049769 (`main`) e 45115052149 (tag). O CI valida código, contrato, configuração e build das imagens, mas não sobe a stack nem roda E2E — isso continua sendo comprovado pelo ensaio F6 local.
 3. A18 depende dos integrantes explicarem o fluxo; não é automatizável.
 4. Dois projetos Compose no mesmo host compartilham a rede fixa `sac-bahia_public` e o router Traefik `sac`; isso permite descoberta cruzada das APIs (401 por JWT diferente, 201 onde se esperava 409). Para o clone foi usado isolamento total; a demo principal mantém o nome fixo.
 5. `scripts/testing.py:8` não normaliza barra final em `SAC_URL`; uma variável com `/` pode gerar `//api/...`. Normalização simples.
@@ -301,8 +330,8 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 
 1. Apresentar na ordem de `docs/ENTREGA.md`, deixando Dozzle iniciado e as 2 réplicas ativas.
 2. Cada integrante deve conseguir explicar o fluxo completo (A18); usar a divisão sugerida no `docs/ENTREGA.md` apenas como apoio.
-3. Declarar com transparência as limitações: AWS (A14) sem credencial válida, CI (A16) sem runner remoto, certificado TLS de desenvolvimento e acoplamento de rede entre projetos Compose no mesmo host.
+3. Declarar com transparência as limitações: AWS (A14) sem credencial válida, certificado TLS de desenvolvimento e acoplamento de rede entre projetos Compose no mesmo host.
 4. Não reexecutar `docker compose down -v` nem operações AWS sem autorização explícita.
-5. Se houver credencial AWS válida e repositório remoto autorizados, reabrir A14/A16 pontualmente; nenhum outro requisito está pendente.
+5. Se houver credencial AWS válida autorizada, reabrir A14 pontualmente; nenhum outro requisito técnico está pendente.
 
-**Não iniciar novas fases nem marcar A14/A16/A18 como PASSOU sem evidência real.**
+**Não iniciar novas fases nem marcar A14/A18 como PASSOU sem evidência real.**
