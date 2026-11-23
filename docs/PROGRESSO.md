@@ -1,10 +1,12 @@
 # Progresso factual do MVP
 
-**Última atualização:** 2026-11-18 | **Situação:** F1–F6 concluídas. O ensaio final da demo passou de ponta a ponta: `smoke`, concorrência, burst, WebSocket, tracing, caos de API, DLQ, segurança e circuit breaker, sem falhas. Permanecem não validados apenas A14 (AWS sem credencial válida), A16 (CI sem runner remoto) e A18 (explicação dos integrantes). Versão final marcada com tag Git.
+**Última atualização:** 2026-11-23 | **Situação:** F1–F6 concluídas e ensaio final aprovado. O núcleo distribuído (REST, concorrência, outbox/eventos, WS, DNS/Traefik, segurança, logs, caos e circuit breaker) está validado com evidência real. Permanecem A14 (AWS sem credencial válida), A16 (GitHub autenticado, mas repositório remoto ainda não criado) e A18 (explicação dos integrantes). Docker Desktop está parado no momento; a última stack verificada (18/11) tinha 7 containers.
 
 ## 0. Estado atual do ambiente
 
-- Docker Desktop iniciado; `docker info` responde.
+- **2026-11-23:** Docker Desktop está parado; a stack não está em execução. Quando ativa, `docker info` respondeu e a stack continha os serviços abaixo.
+- **Git:** `main` com 5 commits; tag `v1.0.0-mvp`; 62 arquivos rastreados; árvore limpa; **nenhum remote GitHub configurado**. `gh` 2.105.0 autenticado como `SantzL7`.
+- **AWS:** credencial ainda inválida (`InvalidClientTokenId`); Terraform 1.17.1 validado, sem `plan/apply` e sem recursos/custos.
 - `.env` local criado por `py scripts/setup_env.py --quiet` (conteúdo não versionado).
 - `.venv` criado com `requests`, `websocket-client` e validador OpenAPI.
 - Stack em execução: PostgreSQL, RabbitMQ, Traefik, Worker e **2 réplicas da API**.
@@ -19,7 +21,7 @@
 
 ## 1. Inventário real (não presumido)
 
-- 61 arquivos rastreados no Git (commit `aae029d`), excluindo `node_modules` e `__pycache__`.
+- 62 arquivos rastreados no Git (HEAD `5b1bcd5`), excluindo `node_modules` e `__pycache__`.
 - Componentes presentes: `api/` (Node/Express + WS), `worker/` (outbox + consumidor), `cliente-python/`, `database/` (schema/seed), `shared/`, `scripts/`, `tests/`, `infra/terraform/`, `.github/workflows/`.
 - Contratos/configuração presentes: `openapi.yaml`, `compose.yaml`, `compose.aws.yaml`, `Dockerfile`, `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, `.dockerignore`.
 - Documentação presente: PRD, MVP, REQUISITOS, ARQUITETURA, ARQUITETURA_ALVO, MATRIZ_BAREMA, PLANO_EXECUCAO, ACEITE, ENTREGA, VALIDACAO_LOCAL, PROMPTS_OPENCODE, GUIA_OPENCODE.
@@ -38,10 +40,10 @@
 | `docker compose config -q` com variáveis temporárias válidas | **PASSOU** — sintaxe/estrutura do Compose. Sem variáveis, falha de propósito cobrando `.env`. |
 | Parsing YAML de `compose.yaml`, `compose.aws.yaml`, `openapi.yaml`, CI | **PASSOU** — sintaxe YAML. |
 | `docker info` | **F0 FALHOU** (daemon parado); **F1 PASSOU** após iniciar o Docker Desktop (`29.7.2`). |
-| `terraform version` | **NÃO EXECUTADO** — Terraform não instalado. |
-| `git status` | **FALHOU** — a pasta não é repositório Git. |
+| `terraform version` | **PASSOU em 2026-11-20** — Terraform 1.17.1 instalado via `winget`; `main.tf` corrigido, `fmt -check`, `init -backend=false` (provider AWS 5.100.0) e `validate` OK. |
+| `git status` | **F0 FALHOU** (não era repositório); **F5 PASSOU** após `git init`; **2026-11-23** com 5 commits, tag `v1.0.0-mvp` e árvore limpa. |
 | Smokes REST/WS/RabbitMQ/PostgreSQL, burst, chaos, DLQ, tracing | **F0 NÃO EXECUTADOS**; **F1:** `smoke.py` e `security_test.py` com PASS; **F2:** `burst.py`, `concurrent_calls.py` e `consistency_test.py` com PASS; **F3:** `websocket_test.py`, `ws_flow_test.py`, `dlq.py`, `broker_chaos.py`, `ws_reconnect_test.py`, `cli_idle_test.py` e `tracing.py` com PASS; **F4:** `balancing.py`, `chaos.py` (ampliado), `security_test.py` (ampliado), `circuit_breaker_test.py`, `telemetry_test.py`, `secrets_check.py` e `tracing.py` com PASS; **F5:** `smoke.py` e `balancing.py` com PASS no clone limpo. |
-| AWS Secrets Manager (`terraform plan/apply`, `GetSecretValue`) | **FALHOU / BLOQUEADO** — `aws sts get-caller-identity` e `scripts/check-aws-secret.js` retornaram `InvalidClientTokenId` (credenciais inválidas/expiradas); Terraform não está instalado. Nenhum recurso ou custo foi criado. |
+| AWS Secrets Manager (`terraform plan/apply`, `GetSecretValue`) | **FALHOU / BLOQUEADO** — `aws sts get-caller-identity` e `scripts/check-aws-secret.js` retornam `InvalidClientTokenId` (credencial inválida/expirada). Terraform 1.17.1 está instalado e validado; `plan/apply` ainda não executados. Nenhum recurso ou custo foi criado. |
 
 ### F1 — execução real
 
@@ -275,7 +277,7 @@ Estados usados: **EXISTE**, **FUNCIONA TESTADO**, **QUEBRADO**, **NÃO TESTADO**
 ### PENDENTES
 
 1. A14 (AWS Secrets Manager/`GetSecretValue`) está bloqueado: as credenciais disponíveis retornam `InvalidClientTokenId`. Terraform 1.17.1 já está instalado e `fmt/init/validate` passaram em `sa-east-1`; falta credencial válida para `plan/apply`, gravação do valor do segredo e leitura real. Não houve custo nem criação de recurso.
-2. A16 (CI remota) continua bloqueado: não há repositório remoto nem runner; o workflow foi validado apenas localmente (YAML + passos manuais). O `gh` 2.105.0 está instalado, mas não autenticado.
+2. A16 (CI remota) continua bloqueado: não há repositório remoto nem runner. O `gh` 2.105.0 está instalado e autenticado como `SantzL7` (2026-11-23); falta criar o repositório privado, configurar o remote e fazer push para o workflow rodar. O workflow foi validado localmente (YAML + passos manuais).
 3. A18 depende dos integrantes explicarem o fluxo; não é automatizável.
 4. Dois projetos Compose no mesmo host compartilham a rede fixa `sac-bahia_public` e o router Traefik `sac`; isso permite descoberta cruzada das APIs (401 por JWT diferente, 201 onde se esperava 409). Para o clone foi usado isolamento total; a demo principal mantém o nome fixo.
 5. `scripts/testing.py:8` não normaliza barra final em `SAC_URL`; uma variável com `/` pode gerar `//api/...`. Normalização simples.
