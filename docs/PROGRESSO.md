@@ -218,6 +218,8 @@ Em 2026-11-23, o item A16 foi fechado com execução real do GitHub Actions.
 
 Passos verdes no runner `ubuntu-latest`: `actions/checkout@v4`, `setup-node@v4` (Node 22), `setup-python@v5` (3.12), `npm ci --no-audit --no-fund` + `npm run test:all` (4/4), `openapi-spec-validator` em `openapi.yaml`, `compileall` de `cliente-python` e `scripts`, `scripts/setup_env.py --quiet` + `docker compose config -q` e `docker compose build`.
 
+A atualização documental que registra esta evidência também foi validada: run [45115282320](https://github.com/SantzL7/sac-bahia-mvp/actions/runs/45115282320), commit `a2fccff`, `success` em 38 s.
+
 **Observações:**
 - O único aviso foi a anotação de depreciação do Node 20 nas actions (`checkout@v4`, `setup-node@v4`, `setup-python@v5`), forçadas a rodar em Node 24. É aviso, não falha; não exige correção para o MVP.
 - O CI valida código, contrato, configuração e build das imagens. Ele **não sobe a stack** nem executa os testes E2E; esses continuam comprovados separadamente pelo ensaio F6 em Docker local.
