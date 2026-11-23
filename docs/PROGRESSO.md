@@ -5,7 +5,7 @@
 ## 0. Estado atual do ambiente
 
 - **2026-11-23:** Docker Desktop está parado; a stack não está em execução. Quando ativa, `docker info` respondeu e a stack continha os serviços abaixo.
-- **Git:** `main` com 7 commits; tag `v1.0.0-mvp`; 62 arquivos rastreados; árvore limpa; **nenhum remote GitHub configurado**. `gh` 2.105.0 autenticado como `SantzL7`.
+- **Git:** `main` com histórico linear (HEAD atual); tag `v1.0.0-mvp`; 62 arquivos rastreados; árvore limpa; **nenhum remote GitHub configurado**. `gh` 2.105.0 autenticado como `SantzL7`.
 - **AWS:** credencial ainda inválida (`InvalidClientTokenId`); Terraform 1.17.1 validado, sem `plan/apply` e sem recursos/custos.
 - `.env` local criado por `py scripts/setup_env.py --quiet` (conteúdo não versionado).
 - `.venv` criado com `requests`, `websocket-client` e validador OpenAPI.
@@ -41,7 +41,7 @@
 | Parsing YAML de `compose.yaml`, `compose.aws.yaml`, `openapi.yaml`, CI | **PASSOU** — sintaxe YAML. |
 | `docker info` | **F0 FALHOU** (daemon parado); **F1 PASSOU** após iniciar o Docker Desktop (`29.7.2`). |
 | `terraform version` | **PASSOU em 2026-11-20** — Terraform 1.17.1 instalado via `winget`; `main.tf` corrigido, `fmt -check`, `init -backend=false` (provider AWS 5.100.0) e `validate` OK. |
-| `git status` | **F0 FALHOU** (não era repositório); **F5 PASSOU** após `git init`; **2026-11-23** com 7 commits, tag `v1.0.0-mvp` e árvore limpa. |
+| `git status` | **F0 FALHOU** (não era repositório); **F5 PASSOU** após `git init`; **2026-11-23** com histórico linear, tag `v1.0.0-mvp` e árvore limpa. |
 | Smokes REST/WS/RabbitMQ/PostgreSQL, burst, chaos, DLQ, tracing | **F0 NÃO EXECUTADOS**; **F1:** `smoke.py` e `security_test.py` com PASS; **F2:** `burst.py`, `concurrent_calls.py` e `consistency_test.py` com PASS; **F3:** `websocket_test.py`, `ws_flow_test.py`, `dlq.py`, `broker_chaos.py`, `ws_reconnect_test.py`, `cli_idle_test.py` e `tracing.py` com PASS; **F4:** `balancing.py`, `chaos.py` (ampliado), `security_test.py` (ampliado), `circuit_breaker_test.py`, `telemetry_test.py`, `secrets_check.py` e `tracing.py` com PASS; **F5:** `smoke.py` e `balancing.py` com PASS no clone limpo. |
 | AWS Secrets Manager (`terraform plan/apply`, `GetSecretValue`) | **FALHOU / BLOQUEADO** — `aws sts get-caller-identity` e `scripts/check-aws-secret.js` retornam `InvalidClientTokenId` (credencial inválida/expirada). Terraform 1.17.1 está instalado e validado; `plan/apply` ainda não executados. Nenhum recurso ou custo foi criado. |
 
