@@ -5,7 +5,7 @@
 ## 0. Estado atual do ambiente
 
 - **2026-11-23:** Docker Desktop está parado; a stack não está em execução. Quando ativa, `docker info` respondeu e a stack continha os serviços abaixo.
-- **Git:** `main` com 5 commits; tag `v1.0.0-mvp`; 62 arquivos rastreados; árvore limpa; **nenhum remote GitHub configurado**. `gh` 2.105.0 autenticado como `SantzL7`.
+- **Git:** `main` com 6 commits; tag `v1.0.0-mvp`; 62 arquivos rastreados; árvore limpa; **nenhum remote GitHub configurado**. `gh` 2.105.0 autenticado como `SantzL7`.
 - **AWS:** credencial ainda inválida (`InvalidClientTokenId`); Terraform 1.17.1 validado, sem `plan/apply` e sem recursos/custos.
 - `.env` local criado por `py scripts/setup_env.py --quiet` (conteúdo não versionado).
 - `.venv` criado com `requests`, `websocket-client` e validador OpenAPI.
@@ -21,7 +21,7 @@
 
 ## 1. Inventário real (não presumido)
 
-- 62 arquivos rastreados no Git (HEAD `5b1bcd5`), excluindo `node_modules` e `__pycache__`.
+- 62 arquivos rastreados no Git (HEAD atual), excluindo `node_modules` e `__pycache__`.
 - Componentes presentes: `api/` (Node/Express + WS), `worker/` (outbox + consumidor), `cliente-python/`, `database/` (schema/seed), `shared/`, `scripts/`, `tests/`, `infra/terraform/`, `.github/workflows/`.
 - Contratos/configuração presentes: `openapi.yaml`, `compose.yaml`, `compose.aws.yaml`, `Dockerfile`, `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, `.dockerignore`.
 - Documentação presente: PRD, MVP, REQUISITOS, ARQUITETURA, ARQUITETURA_ALVO, MATRIZ_BAREMA, PLANO_EXECUCAO, ACEITE, ENTREGA, VALIDACAO_LOCAL, PROMPTS_OPENCODE, GUIA_OPENCODE.
